@@ -129,32 +129,50 @@ cdef const long max_lock_reader_count = 1 << 30
 @cython.final
 @cython.internal
 cdef class RWLock:
-    """Read-write lock.
+    """Read-write lock."""
 
-    Uses a critical section to guard lock operations and a PyMutex for write locking.
-    """
     cdef nonatomic_int _nreaders
+    cdef unsigned long _writer_id
+    cdef unsigned long _level
     cdef cython.pymutex _reader_lock
     cdef cython.pymutex _writer_lock
 
     cdef void lock_read(self) noexcept:
+        if self._writer_id == python.PyThread_get_thread_ident():
+            self._level += 1
+            return
         self._reader_lock.acquire()
         self._nreaders += 1
         if self._nreaders == 1:
             self._writer_lock.acquire()
+            self._writer_id = python.PyThread_get_thread_ident()
         self._reader_lock.release()
 
     cdef void unlock_read(self) noexcept:
+        if self._writer_id == python.PyThread_get_thread_ident() and self._level > 0:
+            self._level -= 1
+            return
         self._reader_lock.acquire()
         self._nreaders -= 1
         if self._nreaders == 0:
+            self._writer_id = 0
             self._writer_lock.release()
         self._reader_lock.release()
 
     cdef void lock_write(self) noexcept:
+        if self._writer_id == python.PyThread_get_thread_ident():
+            # Recursive write lock
+            self._level += 1
+            return
         self._writer_lock.acquire()
+        self._writer_id = python.PyThread_get_thread_ident()
 
     cdef void unlock_write(self) noexcept:
+        if self._level > 0:
+            # Recursive write lock
+            self._level -= 1
+            return
+        self._writer_id = 0
         self._writer_lock.release()
 
     cdef void lock_write_with(self, RWLock second_lock) noexcept:
