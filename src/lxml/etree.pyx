@@ -2123,15 +2123,13 @@ cdef _Element _elementFactory(_Document doc, xmlNode* c_node):
     if not isinstance(element_class, type):
         raise TypeError(f"Element class is not a type, got {type(element_class)}")
 
-    if hasProxy(c_node):
-        # prevent re-entry race condition - we just called into Python
-        doc.lock_proxies()
-        try:
-            result = getProxy(c_node)
-            if result is not None:
-                return result
-        finally:
-            doc.unlock_proxies()
+    doc.lock_proxies()
+    try:
+        result = getProxy(c_node)
+        if result is not None:
+            return result
+    finally:
+        doc.unlock_proxies()
 
     result = element_class.__new__(element_class)
 
