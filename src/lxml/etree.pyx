@@ -2108,15 +2108,14 @@ cdef _Element _elementFactory(_Document doc, xmlNode* c_node):
     if c_node is NULL:
         return None
 
-    if hasProxy(c_node):
-        # Reuse existing proxies.
-        doc.lock_proxies()
-        try:
-            result = getProxy(c_node)
-            if result is not None:
-                return result
-        finally:
-            doc.unlock_proxies()
+    # Reuse existing proxies.
+    doc.lock_proxies()
+    try:
+        result = getProxy(c_node)
+        if result is not None:
+            return result
+    finally:
+        doc.unlock_proxies()
 
     element_class = <type> LOOKUP_ELEMENT_CLASS(
         ELEMENT_CLASS_LOOKUP_STATE, doc, c_node)
