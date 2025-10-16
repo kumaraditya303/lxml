@@ -140,7 +140,8 @@ cdef class RWLock:
         self._nreaders += 1
         if self._nreaders == 1:
             self._writer_lock.acquire()
-            atomic_store(&self._writer_id, python.PyThread_get_thread_ident())
+            # zero means locked by reader
+            atomic_store(&self._writer_id, 0)
         self._reader_lock.release()
 
     cdef void unlock_read(self) noexcept:
@@ -159,10 +160,19 @@ cdef class RWLock:
             # Recursive write lock
             self._level += 1
             return
+        self._reader_lock.acquire()
+        try:
+            if self._nreaders == 1 and atomic_load(&self._writer_id) == 0:
+                # Upgrade from read to write lock
+                atomic_store(&self._writer_id, python.PyThread_get_thread_ident())
+                return
+        finally:
+            self._reader_lock.release()
         self._writer_lock.acquire()
         atomic_store(&self._writer_id, python.PyThread_get_thread_ident())
 
     cdef void unlock_write(self) noexcept:
+        assert atomic_load(&self._writer_id) == python.PyThread_get_thread_ident()
         if self._level > 0:
             # Recursive write lock
             self._level -= 1
