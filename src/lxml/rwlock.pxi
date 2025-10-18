@@ -164,6 +164,7 @@ cdef class RWLock:
         try:
             if self._nreaders == 1 and atomic_load(&self._writer_id) == 0:
                 # Upgrade from read to write lock
+                self._level += 1
                 atomic_store(&self._writer_id, python.PyThread_get_thread_ident())
                 return
         finally:
